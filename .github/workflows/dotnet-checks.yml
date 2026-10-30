@@ -20,6 +20,14 @@ on:
       run-tests:
         type: boolean
         default: true
+      test-filter:
+        description: Optional dotnet test filter.
+        type: string
+        default: ''
+      test-results-name:
+        description: Unique artifact name for each .NET checks call.
+        type: string
+        default: dotnet-test-results
       locked-mode:
         type: boolean
         default: false
@@ -49,6 +57,7 @@ jobs:
       PROJECT: ${{ inputs.project }}
       CONFIGURATION: ${{ inputs.configuration }}
       LOCKED_MODE: ${{ inputs.locked-mode }}
+      TEST_FILTER: ${{ inputs.test-filter }}
       DOTNET_CLI_TELEMETRY_OPTOUT: '1'
     steps:
       - name: Check out source
@@ -79,16 +88,20 @@ jobs:
 
       - name: Test
         if: inputs.run-tests
-        run: >-
-          dotnet test "$PROJECT" --no-build --no-restore
-          --configuration "$CONFIGURATION" --logger trx
-          --results-directory "$RUNNER_TEMP/test-results"
+        run: |
+          arguments=()
+          if [[ -n "$TEST_FILTER" ]]; then
+            arguments+=(--filter "$TEST_FILTER")
+          fi
+          dotnet test "$PROJECT" --no-build --no-restore \
+            --configuration "$CONFIGURATION" --logger trx \
+            --results-directory "$RUNNER_TEMP/test-results" "${arguments[@]}"
 
       - name: Upload test results
         if: always() && inputs.run-tests
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: dotnet-test-results-${{ runner.os }}
+          name: ${{ inputs.test-results-name }}-${{ runner.os }}
           path: ${{ runner.temp }}/test-results
           if-no-files-found: ignore
           retention-days: 7

@@ -40,12 +40,30 @@ jobs:
         run: actionlint -color -shellcheck= -pyflakes=
 
   dotnet:
+    name: .NET (${{ matrix.name }})
+    strategy:
+      matrix:
+        include:
+          - name: TelegramBot
+            repository: bvdcode/TelegramBot.NET
+            ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
+            project: Sources/TelegramBot.Tests/TelegramBot.Tests.csproj
+            dotnet-version: 10.0.x
+            test-filter: ''
+          - name: Blink
+            repository: bvdcode/Blink.NET
+            ref: 247d2371663e1152b470e82b9e782293531d14d3
+            project: Sources/Blink.Tests/Blink.Tests.csproj
+            dotnet-version: 9.0.x
+            test-filter: FullyQualifiedName~Blink.Tests.Unit
     uses: ./.github/workflows/dotnet-checks.yml
     with:
-      repository: bvdcode/TelegramBot.NET
-      ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
-      project: Sources/TelegramBot.Tests/TelegramBot.Tests.csproj
-      dotnet-version: 10.0.x
+      repository: ${{ matrix.repository }}
+      ref: ${{ matrix.ref }}
+      project: ${{ matrix.project }}
+      dotnet-version: ${{ matrix.dotnet-version }}
+      test-filter: ${{ matrix.test-filter }}
+      test-results-name: dotnet-${{ matrix.name }}
 
   node:
     uses: ./.github/workflows/node-checks.yml
