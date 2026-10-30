@@ -1,0 +1,53 @@
+name: GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Three-part release version, without a v prefix.
+        required: true
+        type: string
+      artifact-name:
+        description: Optional artifact containing release assets.
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare release notes
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git log -1 --format=%B "$GITHUB_SHA" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Download release assets
+        if: inputs.artifact-name != ''
+        uses: actions/download-artifact@v8.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ runner.temp }}/release-assets
+
+      - name: Create release
+        uses: ncipollo/release-action@v1.21.0
+        with:
+          tag: v${{ inputs.version }}
+          name: v${{ inputs.version }}
+          commit: ${{ github.sha }}
+          bodyFile: ${{ runner.temp }}/release-notes.md
+          artifacts: ${{ inputs.artifact-name != '' && format('{0}/release-assets/*', runner.temp) || '' }}
+          artifactErrorsFailBuild: ${{ inputs.artifact-name != '' }}
+          skipIfReleaseExists: true
+          makeLatest: true

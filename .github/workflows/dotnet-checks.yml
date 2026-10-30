@@ -1,0 +1,94 @@
+name: .NET checks
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: Solution or project to build and test.
+        required: true
+        type: string
+      dotnet-version:
+        description: SDK version or multiline SDK versions.
+        required: true
+        type: string
+      runner:
+        type: string
+        default: ubuntu-latest
+      configuration:
+        type: string
+        default: Release
+      run-tests:
+        type: boolean
+        default: true
+      locked-mode:
+        type: boolean
+        default: false
+      format:
+        type: boolean
+        default: false
+      repository:
+        description: Repository to check out.
+        type: string
+        default: ${{ github.repository }}
+      ref:
+        description: Commit or ref to check out.
+        type: string
+        default: ${{ github.sha }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: .NET checks
+    runs-on: ${{ inputs.runner }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PROJECT: ${{ inputs.project }}
+      CONFIGURATION: ${{ inputs.configuration }}
+      LOCKED_MODE: ${{ inputs.locked-mode }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Restore dependencies
+        run: |
+          arguments=()
+          if [[ "$LOCKED_MODE" == 'true' ]]; then
+            arguments+=(--locked-mode)
+          fi
+          dotnet restore "$PROJECT" "${arguments[@]}"
+
+      - name: Check formatting
+        if: inputs.format
+        run: dotnet format "$PROJECT" --no-restore --verify-no-changes
+
+      - name: Build
+        run: dotnet build "$PROJECT" --no-restore --configuration "$CONFIGURATION"
+
+      - name: Test
+        if: inputs.run-tests
+        run: >-
+          dotnet test "$PROJECT" --no-build --no-restore
+          --configuration "$CONFIGURATION" --logger trx
+          --results-directory "$RUNNER_TEMP/test-results"
+
+      - name: Upload test results
+        if: always() && inputs.run-tests
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: dotnet-test-results-${{ runner.os }}
+          path: ${{ runner.temp }}/test-results
+          if-no-files-found: ignore
+          retention-days: 7

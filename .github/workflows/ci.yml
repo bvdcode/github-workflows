@@ -1,0 +1,106 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  lint:
+    name: Validate workflows
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install actionlint
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.7.12 --repo rhysd/actionlint \
+            --pattern actionlint_1.7.12_linux_amd64.tar.gz \
+            --pattern actionlint_1.7.12_checksums.txt --dir "$RUNNER_TEMP/actionlint"
+          cd "$RUNNER_TEMP/actionlint"
+          grep ' actionlint_1.7.12_linux_amd64.tar.gz$' actionlint_1.7.12_checksums.txt | sha256sum --check
+          tar -xzf actionlint_1.7.12_linux_amd64.tar.gz actionlint
+          echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
+
+      - name: Check workflow syntax
+        run: actionlint -color -shellcheck= -pyflakes=
+
+  dotnet:
+    uses: ./.github/workflows/dotnet-checks.yml
+    with:
+      repository: bvdcode/TelegramBot.NET
+      ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
+      project: Sources/TelegramBot.Tests/TelegramBot.Tests.csproj
+      dotnet-version: 10.0.x
+
+  node:
+    uses: ./.github/workflows/node-checks.yml
+    with:
+      repository: bvdcode/immich-sorter
+      ref: 3a4e84e25d7256bd85573ef8858f5ee050d06019
+      node-version: '24'
+      typecheck-command: npm run typecheck
+
+  python:
+    uses: ./.github/workflows/python-checks.yml
+    with:
+      repository: bvdcode/nissan-connect-sdk
+      ref: 78da3d8e738c883f032dcd37b8721795d0278cc4
+      python-version: '3.14'
+      install-command: python -m pip install '.[test]'
+
+  docker:
+    uses: ./.github/workflows/docker-checks.yml
+    with:
+      context: tests/fixtures/docker
+      file: tests/fixtures/docker/Dockerfile
+
+  version:
+    uses: ./.github/workflows/gitversion.yml
+
+  release:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [lint, dotnet, node, python, docker, version]
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+
+  promote-major:
+    name: Update major version reference
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: [release, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      VERSION_MAJOR: ${{ needs.version.outputs.major }}
+    steps:
+      - name: Update major version tag
+        run: |
+          tag="v$VERSION_MAJOR"
+          existing=$(git ls-remote "https://github.com/$GH_REPO.git" "refs/tags/$tag")
+          if [[ -z "$existing" ]]; then
+            gh api --method POST "repos/$GH_REPO/git/refs" \
+              -f "ref=refs/tags/$tag" -f "sha=$GITHUB_SHA" --silent
+          else
+            gh api --method PATCH "repos/$GH_REPO/git/refs/tags/$tag" \
+              -f "sha=$GITHUB_SHA" -F force=false --silent
+          fi

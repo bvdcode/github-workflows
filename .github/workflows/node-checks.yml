@@ -1,0 +1,80 @@
+name: Node.js checks
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        required: true
+        type: string
+      working-directory:
+        type: string
+        default: .
+      install-command:
+        type: string
+        default: npm ci
+      lint-command:
+        type: string
+        default: npm run lint
+      typecheck-command:
+        type: string
+        default: ''
+      test-command:
+        type: string
+        default: npm test
+      build-command:
+        type: string
+        default: npm run build
+      repository:
+        description: Repository to check out.
+        type: string
+        default: ${{ github.repository }}
+      ref:
+        description: Commit or ref to check out.
+        type: string
+        default: ${{ github.sha }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Node.js checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    env:
+      CI: 'true'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@v7.1.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Lint
+        if: inputs.lint-command != ''
+        run: ${{ inputs.lint-command }}
+
+      - name: Check types
+        if: inputs.typecheck-command != ''
+        run: ${{ inputs.typecheck-command }}
+
+      - name: Test
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
+
+      - name: Build
+        if: inputs.build-command != ''
+        run: ${{ inputs.build-command }}

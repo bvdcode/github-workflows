@@ -1,0 +1,47 @@
+name: Docker checks
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        type: string
+        default: .
+      file:
+        type: string
+        default: Dockerfile
+      platforms:
+        type: string
+        default: linux/amd64
+      repository:
+        description: Repository to check out.
+        type: string
+        default: ${{ github.repository }}
+      ref:
+        description: Commit or ref to check out.
+        type: string
+        default: ${{ github.sha }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Docker build check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          platforms: ${{ inputs.platforms }}
+          push: false

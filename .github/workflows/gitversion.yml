@@ -1,0 +1,53 @@
+name: GitVersion
+
+on:
+  workflow_call:
+    outputs:
+      version:
+        description: Three-part MajorMinorPatch version.
+        value: ${{ jobs.version.outputs.version }}
+      major:
+        value: ${{ jobs.version.outputs.major }}
+      assembly-version:
+        value: ${{ jobs.version.outputs.assembly-version }}
+      file-version:
+        value: ${{ jobs.version.outputs.file-version }}
+      commits-since-version-source:
+        value: ${{ jobs.version.outputs.commits-since-version-source }}
+      sha:
+        value: ${{ jobs.version.outputs.sha }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: GitVersion
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.gitversion.outputs.majorMinorPatch }}
+      major: ${{ steps.gitversion.outputs.major }}
+      assembly-version: ${{ steps.gitversion.outputs.assemblySemVer }}
+      file-version: ${{ steps.gitversion.outputs.assemblySemFileVer }}
+      commits-since-version-source: ${{ steps.gitversion.outputs.versionSourceDistance }}
+      sha: ${{ steps.gitversion.outputs.sha }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install GitVersion
+        uses: GitTools/actions/gitversion/setup@v4.7.0
+        with:
+          versionSpec: 6.8.2
+
+      - name: Determine version
+        id: gitversion
+        uses: GitTools/actions/gitversion/execute@v4.7.0

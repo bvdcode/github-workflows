@@ -1,0 +1,69 @@
+name: Python checks
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        required: true
+        type: string
+      working-directory:
+        type: string
+        default: .
+      install-command:
+        required: true
+        type: string
+      lint-command:
+        type: string
+        default: python -m ruff check . && python -m ruff format --check .
+      typecheck-command:
+        type: string
+        default: python -m mypy
+      test-command:
+        type: string
+        default: python -m pytest
+      repository:
+        description: Repository to check out.
+        type: string
+        default: ${{ github.repository }}
+      ref:
+        description: Commit or ref to check out.
+        type: string
+        default: ${{ github.sha }}
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: Python checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v7.1.0
+        with:
+          python-version: ${{ inputs.python-version }}
+
+      - name: Install dependencies
+        run: ${{ inputs.install-command }}
+
+      - name: Lint
+        if: inputs.lint-command != ''
+        run: ${{ inputs.lint-command }}
+
+      - name: Check types
+        if: inputs.typecheck-command != ''
+        run: ${{ inputs.typecheck-command }}
+
+      - name: Test
+        if: inputs.test-command != ''
+        run: ${{ inputs.test-command }}
