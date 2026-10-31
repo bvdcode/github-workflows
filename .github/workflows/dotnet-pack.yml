@@ -40,15 +40,8 @@ jobs:
   pack:
     name: Pack NuGet packages
     runs-on: ${{ inputs.runner }}
-    defaults:
-      run:
-        shell: bash
     outputs:
-      artifact-name: ${{ inputs.artifact-name }}
-    env:
-      PROJECTS: ${{ inputs.projects }}
-      PACKAGE_VERSION: ${{ inputs.version }}
-      CONFIGURATION: ${{ inputs.configuration }}
+      artifact-name: ${{ steps.pack.outputs.artifact-name }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7.0.1
@@ -57,27 +50,12 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
           persist-credentials: false
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v6.0.0
+      - name: Pack project
+        id: pack
+        uses: bvdcode/github-workflows/actions/dotnet-pack@v1
         with:
+          projects: ${{ inputs.projects }}
           dotnet-version: ${{ inputs.dotnet-version }}
-      - name: Pack
-        run: |
-          [[ "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
-          [[ -n "$PROJECTS" ]]
-          while IFS= read -r project || [[ -n "$project" ]]; do
-            if [[ -z "$project" ]]; then
-              continue
-            fi
-            [[ -f "$project" ]]
-            dotnet pack "$project" --configuration "$CONFIGURATION" \
-              --output "$RUNNER_TEMP/packages" -p:Version="$PACKAGE_VERSION" \
-              -p:PackageVersion="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
-          done <<< "$PROJECTS"
-      - name: Upload packages
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: ${{ inputs.artifact-name }}
-          path: ${{ runner.temp }}/packages/*nupkg
-          if-no-files-found: error
-          retention-days: 7
+          version: ${{ inputs.version }}
+          configuration: ${{ inputs.configuration }}
+          artifact-name: ${{ inputs.artifact-name }}

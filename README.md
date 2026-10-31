@@ -2,7 +2,7 @@
 
 Reusable checks, package and image publication, version calculation, and GitHub Releases for .NET, Node.js, Python, and Docker projects.
 
-Project workflows own their triggers and dependencies. Shared workflows own the Actions and their pinned versions. Pushes to `develop` and pull requests run checks. Pushes to `main` run the same checks before version calculation, artifact publication, and release creation.
+Project workflows own their triggers and dependencies. Shared workflows and actions own the build steps and their pinned dependencies. Pushes to `develop` and pull requests run checks. Pushes to `main` run the same checks before version calculation, artifact publication, and release creation.
 
 ## Workflows
 
@@ -54,7 +54,7 @@ Complete pipelines are available in [examples/nuget.yml](examples/nuget.yml) and
 
 Node.js and Python callers can set `working-directory` and replace the install, lint, type-check, test, and build commands exposed by each workflow. An empty optional command skips that check; omit only checks the project does not provide.
 
-.NET callers can set `runner`, `configuration`, `locked-mode`, `format`, `run-tests`, `test-filter`, and `test-results-name`. SDK versions are explicit so adopting shared checks does not upgrade a project's runtime. Test results are retained for seven days. Keep an existing unit-test filter in `test-filter`; give each .NET call a distinct `test-results-name` when a project uses multiple calls on the same runner OS.
+.NET callers can set `runner`, `configuration`, `locked-mode`, `format`, `run-tests`, `test-filter`, `test-settings`, `test-results-name`, and `enable-raw-icmp`. SDK versions are explicit so adopting shared checks does not upgrade a project's runtime. Test results are retained for seven days. Keep an existing unit-test filter in `test-filter`; give each .NET call a distinct `test-results-name` when a project uses multiple calls on the same runner OS.
 
 The four checks workflows also accept `repository` and `ref`, defaulting to the calling repository and commit. The CI workflow uses these inputs to exercise the workflows against fixed public projects. Docker checks use a local build fixture.
 
@@ -111,7 +111,7 @@ Publication requires `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`, and `GHCR_TOKEN`. 
 
 ## Versions
 
-Use `@v1` to receive compatible releases after the complete CI passes. Use a full tag such as `@v1.0.0` to keep a fixed version. Action versions are pinned centrally in the reusable workflows. A new major workflow interface uses a new major tag.
+Use `@v1` to receive compatible releases after the complete CI passes. Use a full tag such as `@v1.0.0` to keep a fixed version. Dependency versions are pinned centrally in the workflows and composite actions. A new major workflow interface uses a new major tag.
 
 ## Validation
 
