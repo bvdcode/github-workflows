@@ -1,0 +1,62 @@
+name: Pack NuGet packages
+description: Build and upload packages from checked-out source.
+
+inputs:
+  projects:
+    description: Project or solution paths to pack, one per line.
+    required: true
+  dotnet-version:
+    description: SDK version or multiline SDK versions.
+    required: true
+  version:
+    description: MajorMinorPatch version for every package.
+    required: true
+  configuration:
+    description: Build configuration.
+    default: Release
+  artifact-name:
+    description: Package artifact name.
+    default: nuget-packages
+
+outputs:
+  artifact-name:
+    description: Uploaded package artifact name.
+    value: ${{ inputs.artifact-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v6.0.0
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Pack
+      id: packages
+      shell: bash
+      env:
+        PROJECTS: ${{ inputs.projects }}
+        PACKAGE_VERSION: ${{ inputs.version }}
+        CONFIGURATION: ${{ inputs.configuration }}
+      run: |
+        [[ "$PACKAGE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+        [[ -n "$PROJECTS" ]]
+        packages_directory=$(mktemp -d "$RUNNER_TEMP/nuget-pack.XXXXXX")
+        echo "directory=$packages_directory" >> "$GITHUB_OUTPUT"
+        while IFS= read -r project || [[ -n "$project" ]]; do
+          if [[ -z "$project" ]]; then
+            continue
+          fi
+          [[ -f "$project" ]]
+          dotnet pack "$project" --configuration "$CONFIGURATION" \
+            --output "$packages_directory" -p:Version="$PACKAGE_VERSION" \
+            -p:PackageVersion="$PACKAGE_VERSION" -p:ContinuousIntegrationBuild=true
+        done <<< "$PROJECTS"
+
+    - name: Upload packages
+      uses: actions/upload-artifact@v7.0.2
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: ${{ steps.packages.outputs.directory }}/*nupkg
+        if-no-files-found: error
+        retention-days: 7

@@ -58,6 +58,25 @@ Node.js and Python callers can set `working-directory` and replace the install, 
 
 The four checks workflows also accept `repository` and `ref`, defaulting to the calling repository and commit. The CI workflow uses these inputs to exercise the workflows against fixed public projects. Docker checks use a local build fixture.
 
+## Jobs with project services or environment
+
+`actions/dotnet-checks` and `actions/dotnet-pack` provide the same .NET steps inside ordinary jobs. Check out the project before calling them. Job environment variables and services remain available to the build and tests, including license variables and PostgreSQL connections.
+
+`actions/dotnet-checks` accepts `test-settings` for a runsettings file and `enable-raw-icmp: true` for Linux network tests. Prepare conditional test settings in the calling workflow when an integration test requires local configuration. `actions/dotnet-pack` accepts the same package inputs as `dotnet-pack.yml` and exposes `artifact-name`.
+
+```yaml
+checks:
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v7.0.1
+      with:
+        persist-credentials: false
+    - uses: bvdcode/github-workflows/actions/dotnet-checks@v1
+      with:
+        project: src/Application.sln
+        dotnet-version: 10.0.x
+```
+
 ## NuGet publication
 
 `dotnet-pack.yml` packs the listed projects or solutions with the explicit SDK version. It sets `Version` and `PackageVersion` to the requested three-part version and uploads the `nuget-packages` artifact. `projects` accepts multiple paths separated by newlines. Native packages can keep their existing build job and supply a package artifact directly.

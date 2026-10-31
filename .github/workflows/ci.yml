@@ -65,6 +65,47 @@ jobs:
       test-filter: ${{ matrix.test-filter }}
       test-results-name: dotnet-${{ matrix.name }}
 
+  dotnet-actions:
+    name: .NET composite actions
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out workflows
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Check out fixture
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: bvdcode/TelegramBot.NET
+          ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
+          path: .fixtures/dotnet
+          persist-credentials: false
+      - name: Prepare test settings
+        run: echo '<RunSettings />' > "$RUNNER_TEMP/fixture.runsettings"
+      - name: Check fixture
+        uses: ./actions/dotnet-checks
+        with:
+          project: .fixtures/dotnet/Sources/TelegramBot.Tests/TelegramBot.Tests.csproj
+          dotnet-version: 10.0.x
+          test-results-name: dotnet-composite
+          test-settings: ${{ runner.temp }}/fixture.runsettings
+          enable-raw-icmp: true
+      - name: Pack fixture
+        uses: ./actions/dotnet-pack
+        with:
+          projects: .fixtures/dotnet/Sources/TelegramBot/TelegramBot.csproj
+          dotnet-version: 10.0.x
+          version: ${{ needs.version.outputs.version }}
+          artifact-name: composite-nuget-packages
+      - name: Validate fixture packages
+        uses: ./actions/nuget-publish
+        with:
+          artifact-name: composite-nuget-packages
+          version: ${{ needs.version.outputs.version }}
+          authentication: api-key
+          publish: false
+
   node:
     uses: ./.github/workflows/node-checks.yml
     with:
@@ -174,7 +215,7 @@ jobs:
 
   release:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [lint, dotnet, node, python, docker, version, package-guards, nuget-publication, publication-results]
+    needs: [lint, dotnet, dotnet-actions, node, python, docker, version, package-guards, nuget-publication, publication-results]
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml

@@ -1,0 +1,106 @@
+name: .NET checks
+description: Set up .NET, restore, build and test checked-out source.
+
+inputs:
+  project:
+    description: Solution or project to build and test.
+    required: true
+  dotnet-version:
+    description: SDK version or multiline SDK versions.
+    required: true
+  configuration:
+    description: Build configuration.
+    default: Release
+  run-tests:
+    description: Run tests after building.
+    default: 'true'
+  test-filter:
+    description: Optional dotnet test filter.
+    default: ''
+  test-settings:
+    description: Optional runsettings file path.
+    default: ''
+  test-results-name:
+    description: Unique artifact name for each checks call.
+    default: dotnet-test-results
+  locked-mode:
+    description: Require locked dependency restore.
+    default: 'false'
+  format:
+    description: Verify formatting before building.
+    default: 'false'
+  enable-raw-icmp:
+    description: Grant the .NET host raw ICMP socket capability on Linux.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up .NET
+      uses: actions/setup-dotnet@v6.0.0
+      with:
+        dotnet-version: ${{ inputs.dotnet-version }}
+
+    - name: Restore dependencies
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        LOCKED_MODE: ${{ inputs.locked-mode }}
+        DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      run: |
+        arguments=()
+        if [[ "$LOCKED_MODE" == 'true' ]]; then
+          arguments+=(--locked-mode)
+        fi
+        dotnet restore "$PROJECT" "${arguments[@]}"
+
+    - name: Check formatting
+      if: inputs.format == 'true'
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+      run: dotnet format "$PROJECT" --no-restore --verify-no-changes
+
+    - name: Build
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        CONFIGURATION: ${{ inputs.configuration }}
+      run: dotnet build "$PROJECT" --no-restore --configuration "$CONFIGURATION"
+
+    - name: Enable raw ICMP sockets
+      if: inputs.enable-raw-icmp == 'true'
+      shell: bash
+      run: |
+        [[ "$RUNNER_OS" == 'Linux' ]]
+        sudo setcap cap_net_raw=ep "$(readlink -f "$(command -v dotnet)")"
+
+    - name: Test
+      if: inputs.run-tests == 'true'
+      shell: bash
+      env:
+        PROJECT: ${{ inputs.project }}
+        CONFIGURATION: ${{ inputs.configuration }}
+        TEST_FILTER: ${{ inputs.test-filter }}
+        TEST_SETTINGS: ${{ inputs.test-settings }}
+      run: |
+        arguments=()
+        if [[ -n "$TEST_FILTER" ]]; then
+          arguments+=(--filter "$TEST_FILTER")
+        fi
+        if [[ -n "$TEST_SETTINGS" ]]; then
+          [[ -f "$TEST_SETTINGS" ]]
+          arguments+=(--settings "$TEST_SETTINGS")
+        fi
+        dotnet test "$PROJECT" --no-build --no-restore \
+          --configuration "$CONFIGURATION" --logger trx \
+          --results-directory "$RUNNER_TEMP/test-results" "${arguments[@]}"
+
+    - name: Upload test results
+      if: always() && inputs.run-tests == 'true'
+      uses: actions/upload-artifact@v7.0.2
+      with:
+        name: ${{ inputs.test-results-name }}-${{ runner.os }}
+        path: ${{ runner.temp }}/test-results
+        if-no-files-found: ignore
+        retention-days: 7
