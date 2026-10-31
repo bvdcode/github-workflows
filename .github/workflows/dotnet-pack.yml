@@ -52,7 +52,7 @@ jobs:
           persist-credentials: false
       - name: Pack project
         id: pack
-        uses: bvdcode/github-workflows/actions/dotnet-pack@v1
+        uses: bvdcode/github-workflows/actions/dotnet-pack@v1.0.1
         with:
           projects: ${{ inputs.projects }}
           dotnet-version: ${{ inputs.dotnet-version }}
