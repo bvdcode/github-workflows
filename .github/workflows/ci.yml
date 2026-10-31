@@ -90,9 +90,108 @@ jobs:
   version:
     uses: ./.github/workflows/gitversion.yml
 
+  package-guards:
+    name: Package publication guards
+    uses: ./.github/workflows/python-checks.yml
+    with:
+      python-version: '3.14'
+      install-command: python -m pip install ruff==0.17.3 mypy==2.4.1
+      lint-command: python -m ruff check --select E,F,I actions tests && python -m ruff format --check actions tests
+      typecheck-command: python -m mypy --strict actions/nuget-publish/validate_packages.py tests/test_validate_packages.py
+      test-command: python -m unittest discover -s tests -p 'test_*.py' -v
+
+  nuget-package:
+    name: Build NuGet publication fixture
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out public package source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: bvdcode/TelegramBot.NET
+          ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
+          persist-credentials: false
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Pack
+        env:
+          PACKAGE_VERSION: ${{ needs.version.outputs.version }}
+        run: >-
+          dotnet pack Sources/TelegramBot/TelegramBot.csproj --configuration Release
+          --output "$RUNNER_TEMP/packages" -p:Version="$PACKAGE_VERSION"
+      - name: Upload packages
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: fixture-nuget-packages
+          path: ${{ runner.temp }}/packages/*nupkg
+          if-no-files-found: error
+          retention-days: 7
+
+  nuget-publication:
+    name: NuGet (${{ matrix.authentication }})
+    needs: [nuget-package, version]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        authentication: [api-key, oidc]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate NuGet publication
+        uses: ./actions/nuget-publish
+        with:
+          artifact-name: fixture-nuget-packages
+          version: ${{ needs.version.outputs.version }}
+          authentication: ${{ matrix.authentication }}
+          publish: false
+
+  docker-publication:
+    needs: version
+    uses: ./.github/workflows/docker-publish.yml
+    with:
+      version: ${{ needs.version.outputs.version }}
+      dockerhub-image: bvdcode/github-workflows-fixture
+      ghcr-image: ghcr.io/bvdcode/github-workflows-fixture
+      publish: false
+      context: tests/fixtures/docker
+      file: tests/fixtures/docker/Dockerfile
+      platforms: linux/amd64,linux/arm64
+      additional-tags: v${{ needs.version.outputs.version }}
+      cache-scope: docker-publication-${{ github.ref_name }}
+
+  publication-results:
+    name: Validate publication tags
+    needs: [docker-publication, version]
+    runs-on: ubuntu-latest
+    env:
+      IMAGE_TAGS: ${{ needs.docker-publication.outputs.tags }}
+      RELEASE_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - name: Check both registry tag sets
+        run: |
+          python3 - <<'PYTHON'
+          import os
+
+          version = os.environ['RELEASE_VERSION']
+          expected = {
+              f'{image}:{tag}'
+              for image in (
+                  'bvdcode/github-workflows-fixture',
+                  'ghcr.io/bvdcode/github-workflows-fixture',
+              )
+              for tag in (version, 'latest', f'v{version}')
+          }
+          actual = set(os.environ['IMAGE_TAGS'].splitlines())
+          assert actual == expected, (actual, expected)
+          PYTHON
+
   release:
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    needs: [lint, dotnet, node, python, docker, version]
+    needs: [lint, dotnet, node, python, docker, version, package-guards, nuget-publication, publication-results]
     permissions:
       contents: write
     uses: ./.github/workflows/release.yml

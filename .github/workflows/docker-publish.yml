@@ -1,0 +1,169 @@
+name: Publish Docker image
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: MajorMinorPatch version, without a v prefix.
+        required: true
+        type: string
+      dockerhub-image:
+        description: Docker Hub image, including its namespace.
+        required: true
+        type: string
+      ghcr-image:
+        description: Full ghcr.io image name.
+        required: true
+        type: string
+      publish:
+        description: Push on main; false builds and validates tags only.
+        type: boolean
+        default: false
+      context:
+        type: string
+        default: .
+      file:
+        type: string
+        default: Dockerfile
+      target:
+        type: string
+        default: ''
+      platforms:
+        type: string
+        default: linux/amd64
+      runner:
+        type: string
+        default: ubuntu-latest
+      build-args:
+        type: string
+        default: ''
+      additional-tags:
+        description: Additional tag suffixes, one per line, applied to both images.
+        type: string
+        default: ''
+      tag-latest:
+        type: boolean
+        default: true
+      cache-scope:
+        type: string
+        default: docker-${{ github.ref_name }}
+    secrets:
+      DOCKERHUB_USERNAME:
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
+      GHCR_TOKEN:
+        required: false
+      BUILD_SECRETS:
+        description: BuildKit secret definitions accepted by docker/build-push-action.
+        required: false
+    outputs:
+      digest:
+        description: Digest of the published image.
+        value: ${{ jobs.publish.outputs.digest }}
+      tags:
+        description: Complete tag list for both registries.
+        value: ${{ jobs.publish.outputs.tags }}
+
+jobs:
+  publish:
+    name: Docker publication
+    if: ${{ !inputs.publish || (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') }}
+    runs-on: ${{ inputs.runner }}
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      tags: ${{ steps.tags.outputs.tags }}
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      HUB_IMAGE: ${{ inputs.dockerhub-image }}
+      GHCR_IMAGE: ${{ inputs.ghcr-image }}
+      ADDITIONAL_TAGS: ${{ inputs.additional-tags }}
+      TAG_LATEST: ${{ inputs.tag-latest }}
+    steps:
+      - name: Validate publishing credentials
+        if: inputs.publish
+        env:
+          HUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          HUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          if [[ -z "$HUB_USERNAME" || -z "$HUB_TOKEN" || -z "$GHCR_TOKEN" ]]; then
+            echo '::error::Docker Hub username/token and GHCR token are all required'
+            exit 1
+          fi
+
+      - name: Prepare image tags
+        id: tags
+        run: |
+          [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$HUB_IMAGE" =~ ^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$ ]]
+          [[ "$GHCR_IMAGE" =~ ^ghcr\.io/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*$ ]]
+          tags=("$RELEASE_VERSION")
+          if [[ "$TAG_LATEST" == 'true' ]]; then
+            tags+=(latest)
+          fi
+          while IFS= read -r tag || [[ -n "$tag" ]]; do
+            if [[ -z "$tag" ]]; then
+              continue
+            fi
+            if [[ ! "$tag" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+              echo '::error::Invalid additional Docker tag'
+              exit 1
+            fi
+            tags+=("$tag")
+          done <<< "$ADDITIONAL_TAGS"
+          {
+            echo 'tags<<IMAGE_TAGS'
+            for image in "$HUB_IMAGE" "$GHCR_IMAGE"; do
+              for tag in "${tags[@]}"; do
+                printf '%s:%s\n' "$image" "$tag"
+              done
+            done
+            echo 'IMAGE_TAGS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up QEMU
+        if: inputs.platforms != 'linux/amd64'
+        uses: docker/setup-qemu-action@v4.4.0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4.4.1
+
+      - name: Sign in to Docker Hub
+        if: inputs.publish
+        uses: docker/login-action@v4.7.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Sign in to GHCR
+        if: inputs.publish
+        uses: docker/login-action@v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and publish
+        id: build
+        uses: docker/build-push-action@v7.4.0
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.file }}
+          target: ${{ inputs.target }}
+          platforms: ${{ inputs.platforms }}
+          build-args: ${{ inputs.build-args }}
+          secrets: ${{ secrets.BUILD_SECRETS }}
+          push: ${{ inputs.publish }}
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ inputs.version }}
+          cache-from: type=gha,scope=${{ inputs.cache-scope }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.cache-scope }}
