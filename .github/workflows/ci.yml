@@ -86,6 +86,7 @@ jobs:
     with:
       context: tests/fixtures/docker
       file: tests/fixtures/docker/Dockerfile
+      platforms: linux/amd64,linux/arm64
 
   version:
     uses: ./.github/workflows/gitversion.yml
