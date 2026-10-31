@@ -101,33 +101,15 @@ jobs:
       test-command: python -m unittest discover -s tests -p 'test_*.py' -v
 
   nuget-package:
-    name: Build NuGet publication fixture
     needs: version
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out public package source
-        uses: actions/checkout@v7.0.1
-        with:
-          repository: bvdcode/TelegramBot.NET
-          ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
-          persist-credentials: false
-      - name: Set up .NET
-        uses: actions/setup-dotnet@v6.0.0
-        with:
-          dotnet-version: 10.0.x
-      - name: Pack
-        env:
-          PACKAGE_VERSION: ${{ needs.version.outputs.version }}
-        run: >-
-          dotnet pack Sources/TelegramBot/TelegramBot.csproj --configuration Release
-          --output "$RUNNER_TEMP/packages" -p:Version="$PACKAGE_VERSION"
-      - name: Upload packages
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: fixture-nuget-packages
-          path: ${{ runner.temp }}/packages/*nupkg
-          if-no-files-found: error
-          retention-days: 7
+    uses: ./.github/workflows/dotnet-pack.yml
+    with:
+      repository: bvdcode/TelegramBot.NET
+      ref: 1dcbfc4af15c964f63cfce17d30e594980cd5552
+      projects: Sources/TelegramBot/TelegramBot.csproj
+      dotnet-version: 10.0.x
+      version: ${{ needs.version.outputs.version }}
+      artifact-name: fixture-nuget-packages
 
   nuget-publication:
     name: NuGet (${{ matrix.authentication }})
