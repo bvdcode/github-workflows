@@ -48,7 +48,7 @@ jobs:
     uses: bvdcode/github-workflows/.github/workflows/gitversion.yml@v1
 ```
 
-Complete pipelines are available in [examples/nuget.yml](examples/nuget.yml) and [examples/docker.yml](examples/docker.yml). Replace project paths, SDK versions, image names, and credential mappings with the project configuration. Give publishing permissions only to the corresponding jobs.
+Complete pipelines are available in [examples/nuget.yml](examples/nuget.yml) and [examples/docker.yml](examples/docker.yml). Replace project paths, SDK versions, image names, and credential mappings with the project configuration. Give publishing permissions only to the corresponding jobs. The examples serialize runs on main and cancel outdated development checks.
 
 ## Project commands
 
