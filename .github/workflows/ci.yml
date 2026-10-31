@@ -37,7 +37,7 @@ jobs:
           echo "$RUNNER_TEMP/actionlint" >> "$GITHUB_PATH"
 
       - name: Check workflow syntax
-        run: actionlint -color -shellcheck= -pyflakes=
+        run: actionlint -color -shellcheck= -pyflakes= .github/workflows/*.yml examples/*.yml
 
   dotnet:
     name: .NET (${{ matrix.name }})

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: bvdcode/github-workflows/.github/workflows/dotnet-checks.yml@v1
+    with:
+      project: src/Library.sln
+      dotnet-version: 10.0.x
+
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    uses: bvdcode/github-workflows/.github/workflows/gitversion.yml@v1
+
+  pack:
+    needs: version
+    uses: bvdcode/github-workflows/.github/workflows/dotnet-pack.yml@v1
+    with:
+      projects: src/Library/Library.csproj
+      dotnet-version: 10.0.x
+      version: ${{ needs.version.outputs.version }}
+
+  publish:
+    needs: [version, pack]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - name: Publish NuGet packages
+        uses: bvdcode/github-workflows/actions/nuget-publish@v1
+        with:
+          artifact-name: ${{ needs.pack.outputs.artifact-name }}
+          version: ${{ needs.version.outputs.version }}
+          authentication: oidc
+          nuget-user: ${{ vars.NUGET_USER }}
+          github-packages-token: ${{ github.token }}
+          publish: true
+
+  release:
+    needs: [version, pack, publish]
+    permissions:
+      contents: write
+    uses: bvdcode/github-workflows/.github/workflows/release.yml@v1
+    with:
+      version: ${{ needs.version.outputs.version }}
+      artifact-name: ${{ needs.pack.outputs.artifact-name }}

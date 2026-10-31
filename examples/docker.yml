@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    uses: bvdcode/github-workflows/.github/workflows/docker-checks.yml@v1
+
+  version:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    uses: bvdcode/github-workflows/.github/workflows/gitversion.yml@v1
+
+  publish:
+    needs: version
+    permissions:
+      contents: read
+      packages: write
+    uses: bvdcode/github-workflows/.github/workflows/docker-publish.yml@v1
+    with:
+      version: ${{ needs.version.outputs.version }}
+      dockerhub-image: ${{ vars.DOCKERHUB_IMAGE }}
+      ghcr-image: ${{ vars.GHCR_IMAGE }}
+      publish: true
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+      GHCR_TOKEN: ${{ github.token }}
+
+  release:
+    needs: [version, publish]
+    permissions:
+      contents: write
+    uses: bvdcode/github-workflows/.github/workflows/release.yml@v1
+    with:
+      version: ${{ needs.version.outputs.version }}
