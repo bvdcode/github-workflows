@@ -58,24 +58,13 @@ Node.js and Python callers can set `working-directory` and replace the install, 
 
 The four checks workflows also accept `repository` and `ref`, defaulting to the calling repository and commit. The CI workflow uses these inputs to exercise the workflows against fixed public projects. Docker checks use a local build fixture.
 
-## Jobs with project services or environment
+## .NET integration checks
 
-`actions/dotnet-checks` and `actions/dotnet-pack` provide the same .NET steps inside ordinary jobs. Check out the project before calling them. Job environment variables and services remain available to the build and tests, including license variables and PostgreSQL connections.
+Project repositories call the shared `.NET checks` and `Pack NuGet packages` workflows. Configure the project through inputs and explicitly map its build secrets.
 
-`actions/dotnet-checks` accepts `test-settings` for a runsettings file and `enable-raw-icmp: true` for Linux network tests. Prepare conditional test settings in the calling workflow when an integration test requires local configuration. `actions/dotnet-pack` accepts the same package inputs as `dotnet-pack.yml` and exposes `artifact-name`.
+Set `postgres-project` to enable the PostgreSQL test job inside `dotnet-checks.yml`. The workflow accepts `postgres-test-filter`, `postgres-image`, `postgres-database`, and `postgres-connection-variable`. The database runs locally in the test job; its connection is assigned to the configured environment variable. `enable-raw-icmp: true` enables Linux raw socket tests in the main checks job.
 
-```yaml
-checks:
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v7.0.1
-      with:
-        persist-credentials: false
-    - uses: bvdcode/github-workflows/actions/dotnet-checks@v1
-      with:
-        project: src/Application.sln
-        dotnet-version: 10.0.x
-```
+Both .NET workflows accept the optional `SIXLABORS_LICENSE_KEY` secret and expose it as `SixLaborsLicenseKey` to the build. Projects with PostgreSQL integration checks retain their separate test run alongside the full solution checks.
 
 ## NuGet publication
 

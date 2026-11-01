@@ -32,6 +32,10 @@ on:
     outputs:
       artifact-name:
         value: ${{ jobs.pack.outputs.artifact-name }}
+    secrets:
+      SIXLABORS_LICENSE_KEY:
+        description: Optional license used by the project build.
+        required: false
 
 permissions:
   contents: read
@@ -52,6 +56,8 @@ jobs:
           persist-credentials: false
       - name: Pack project
         id: pack
+        env:
+          SixLaborsLicenseKey: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         uses: bvdcode/github-workflows/actions/dotnet-pack@v1.0.1
         with:
           projects: ${{ inputs.projects }}

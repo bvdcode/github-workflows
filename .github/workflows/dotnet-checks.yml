@@ -42,6 +42,24 @@ on:
       format:
         type: boolean
         default: false
+      postgres-project:
+        description: Optional project for PostgreSQL integration checks.
+        type: string
+        default: ''
+      postgres-test-filter:
+        description: Optional filter for the PostgreSQL test project.
+        type: string
+        default: ''
+      postgres-image:
+        type: string
+        default: postgres:18
+      postgres-database:
+        type: string
+        default: integration_tests
+      postgres-connection-variable:
+        description: Environment variable consumed by the integration tests.
+        type: string
+        default: POSTGRES_CONNECTION_STRING
       repository:
         description: Repository to check out.
         type: string
@@ -50,6 +68,10 @@ on:
         description: Commit or ref to check out.
         type: string
         default: ${{ github.sha }}
+    secrets:
+      SIXLABORS_LICENSE_KEY:
+        description: Optional license used by the project build.
+        required: false
 
 permissions:
   contents: read
@@ -66,6 +88,8 @@ jobs:
           ref: ${{ inputs.ref }}
           persist-credentials: false
       - name: Check project
+        env:
+          SixLaborsLicenseKey: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         uses: bvdcode/github-workflows/actions/dotnet-checks@v1.0.1
         with:
           project: ${{ inputs.project }}
@@ -78,3 +102,49 @@ jobs:
           locked-mode: ${{ inputs.locked-mode }}
           format: ${{ inputs.format }}
           enable-raw-icmp: ${{ inputs.enable-raw-icmp }}
+
+  postgres:
+    name: PostgreSQL checks
+    if: inputs.postgres-project != ''
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: ${{ inputs.postgres-image }}
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+          POSTGRES_DB: ${{ inputs.postgres-database }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ${{ inputs.postgres-database }}"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7.0.1
+        with:
+          repository: ${{ inputs.repository }}
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - name: Configure test connection
+        shell: bash
+        env:
+          CONNECTION_VARIABLE: ${{ inputs.postgres-connection-variable }}
+          DATABASE_NAME: ${{ inputs.postgres-database }}
+        run: |
+          [[ "$CONNECTION_VARIABLE" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+          [[ "$DATABASE_NAME" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]
+          printf '%s=Host=localhost;Port=5432;Database=%s;Username=postgres\n' \
+            "$CONNECTION_VARIABLE" "$DATABASE_NAME" >> "$GITHUB_ENV"
+      - name: Check PostgreSQL project
+        env:
+          SixLaborsLicenseKey: ${{ secrets.SIXLABORS_LICENSE_KEY }}
+        uses: bvdcode/github-workflows/actions/dotnet-checks@v1.0.1
+        with:
+          project: ${{ inputs.postgres-project }}
+          dotnet-version: ${{ inputs.dotnet-version }}
+          configuration: ${{ inputs.configuration }}
+          test-filter: ${{ inputs.postgres-test-filter }}
+          test-results-name: ${{ inputs.test-results-name }}-postgres
+          locked-mode: ${{ inputs.locked-mode }}
